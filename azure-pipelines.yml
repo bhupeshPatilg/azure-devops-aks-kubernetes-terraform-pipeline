@@ -1,0 +1,55 @@
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureSubscription: 'BHUPESH-PAYG-AZ-EXPERT-SUB'
+  resourceGroupName: 'TerraformTST'
+  aksClusterName: 'aks-prod'
+
+stages:
+
+- stage: Validate
+  jobs:
+  - job: Validate
+
+    steps:
+    - checkout: self
+
+    - script: |
+        echo "Validating Kubernetes YAML files"
+        kubectl apply --dry-run=client -f manifests/
+      displayName: Validate YAML
+
+- stage: Deploy
+  dependsOn: Validate
+
+  jobs:
+  - deployment: DeployAKS
+
+    environment: aks-prod
+
+    strategy:
+      runOnce:
+        deploy:
+
+          steps:
+
+          - checkout: self
+
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(azureSubscription)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az aks get-credentials \
+                --resource-group $(resourceGroupName) \
+                --name $(aksClusterName) \
+                --overwrite-existing
+
+          - script: |
+              kubectl apply -f manifests/
+            displayName: Deploy to AKS
